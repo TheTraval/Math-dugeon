@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Math Dungeon</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <main id="game">
+
+        <header class="game-header">
+            <div>
+                <h1>⚔ MATH DUNGEON</h1>
+                <p id="floorDisplay">Floor 1</p>
+            </div>
+
+            <div class="player-stats">
+                <div class="stat">
+                    <span>❤️ HP</span>
+                    <div class="bar">
+                        <div id="playerHpBar" class="bar-fill player-bar"></div>
+                    </div>
+                    <span id="playerHpText">100 / 100</span>
+                </div>
+
+                <div class="stat">
+                    <span>⭐ XP</span>
+                    <div class="xp-bar">
+                        <div id="xpBar" class="bar-fill xp-fill"></div>
+                    </div>
+                    <span id="xpText">0 / 100</span>
+                </div>
+
+                <div class="level">
+                    LVL <span id="levelText">1</span>
+                </div>
+            </div>
+        </header>
+
+        <section id="dungeon">
+
+            <div class="room">
+
+                <div class="dungeon-wall top-wall"></div>
+                <div class="dungeon-wall bottom-wall"></div>
+                <div class="dungeon-wall left-wall"></div>
+                <div class="dungeon-wall right-wall"></div>
+
+                <div class="torch torch-left">
+                    🔥
+                </div>
+
+                <div class="torch torch-right">
+                    🔥
+                </div>
+
+                <div class="room-title">
+                    <span id="roomText">THE DUNGEON</span>
+                </div>
+
+                <div id="player" class="character player-character">
+                    🧙
+                </div>
+
+                <div id="enemy" class="character enemy-character">
+                    👾
+                    <div class="enemy-name" id="enemyName">Dungeon Slime</div>
+
+                    <div class="enemy-hp">
+                        <div id="enemyHpBar" class="bar-fill enemy-bar"></div>
+                    </div>
+
+                    <div id="enemyHpText">30 / 30</div>
+                </div>
+
+                <div id="attackEffect" class="attack-effect">
+                    ⚡
+                </div>
+
+                <div id="damageText" class="damage-text">
+                    -10
+                </div>
+
+            </div>
+
+        </section>
+
+        <section id="questionPanel" class="question-panel">
+
+            <div class="question-header">
+                <span>🧮 MATH CHALLENGE</span>
+                <span id="questionDifficulty">Addition</span>
+            </div>
+
+            <div id="question" class="question">
+                What is 7 + 8?
+            </div>
+
+            <div id="answers" class="answers">
+                <button class="answer-button">15</button>
+                <button class="answer-button">16</button>
+                <button class="answer-button">14</button>
+                <button class="answer-button">18</button>
+            </div>
+
+            <div id="feedback" class="feedback">
+                Answer the question to attack!
+            </div>
+
+        </section>
+
+        <div id="gameMessage" class="game-message hidden">
+            <div class="message-box">
+                <div id="messageIcon">🏆</div>
+                <h2 id="messageTitle">Victory!</h2>
+                <p id="messageText">You defeated the dungeon!</p>
+                <button id="restartButton">🔄 Restart Game</button>
+            </div>
+        </div>
+
+    </main>
+
+    <script src="game.js"></script>
+</body>
+</html>
