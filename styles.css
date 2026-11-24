@@ -1,0 +1,627 @@
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    min-height: 100vh;
+    background:
+        radial-gradient(circle at center, #24243b 0%, #10101d 65%, #080810 100%);
+    color: #ffffff;
+    font-family: "Courier New", monospace;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+button {
+    font-family: inherit;
+}
+
+#game {
+    width: min(1100px, 96vw);
+    min-height: 90vh;
+    position: relative;
+}
+
+/* =========================
+   HEADER
+========================= */
+
+.game-header {
+    min-height: 90px;
+    background: #171725;
+    border: 4px solid #4a4a66;
+    box-shadow:
+        0 0 0 4px #090910,
+        0 8px 0 #090910;
+    padding: 14px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 20px;
+}
+
+.game-header h1 {
+    margin: 0;
+    color: #f5d76e;
+    font-size: clamp(20px, 3vw, 30px);
+    text-shadow: 3px 3px #5d4317;
+}
+
+.game-header p {
+    margin: 5px 0 0;
+    color: #aaaac4;
+    font-size: 14px;
+}
+
+.player-stats {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+}
+
+.stat {
+    display: grid;
+    grid-template-columns: auto 100px auto;
+    gap: 7px;
+    align-items: center;
+    font-size: 12px;
+}
+
+.bar,
+.xp-bar {
+    width: 100px;
+    height: 14px;
+    background: #08080f;
+    border: 2px solid #55556c;
+    overflow: hidden;
+}
+
+.bar-fill {
+    height: 100%;
+    width: 100%;
+    transition: width 0.3s ease;
+}
+
+.player-bar {
+    background: #e94b5f;
+}
+
+.xp-fill {
+    background: #f1c84c;
+    width: 0%;
+}
+
+.level {
+    background: #292940;
+    border: 2px solid #686883;
+    padding: 9px 12px;
+    color: #f5d76e;
+    font-weight: bold;
+}
+
+/* =========================
+   DUNGEON
+========================= */
+
+#dungeon {
+    margin-top: 18px;
+}
+
+.room {
+    height: 440px;
+    position: relative;
+    overflow: hidden;
+    background:
+        repeating-linear-gradient(
+            0deg,
+            transparent 0,
+            transparent 47px,
+            rgba(0, 0, 0, 0.18) 48px
+        ),
+        repeating-linear-gradient(
+            90deg,
+            transparent 0,
+            transparent 47px,
+            rgba(0, 0, 0, 0.18) 48px
+        ),
+        #28283b;
+
+    border: 12px solid #11111c;
+
+    box-shadow:
+        inset 0 0 0 5px #41415a,
+        inset 0 0 60px #08080e,
+        0 8px 0 #08080e;
+}
+
+/* Pixel-style wall blocks */
+
+.dungeon-wall {
+    position: absolute;
+    background: #191925;
+    z-index: 2;
+}
+
+.top-wall,
+.bottom-wall {
+    left: 0;
+    right: 0;
+    height: 22px;
+}
+
+.top-wall {
+    top: 0;
+    border-bottom: 4px solid #4a4a5f;
+}
+
+.bottom-wall {
+    bottom: 0;
+    border-top: 4px solid #4a4a5f;
+}
+
+.left-wall,
+.right-wall {
+    top: 0;
+    bottom: 0;
+    width: 22px;
+}
+
+.left-wall {
+    left: 0;
+    border-right: 4px solid #4a4a5f;
+}
+
+.right-wall {
+    right: 0;
+    border-left: 4px solid #4a4a5f;
+}
+
+.room-title {
+    position: absolute;
+    top: 28px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: #777790;
+    font-size: 12px;
+    letter-spacing: 3px;
+}
+
+/* =========================
+   TORCHES
+========================= */
+
+.torch {
+    position: absolute;
+    top: 70px;
+    font-size: 38px;
+    filter: drop-shadow(0 0 12px #ff9d38);
+    animation: flicker 0.8s infinite alternate;
+    z-index: 3;
+}
+
+.torch-left {
+    left: 65px;
+}
+
+.torch-right {
+    right: 65px;
+}
+
+@keyframes flicker {
+    from {
+        transform: scale(1);
+        filter: drop-shadow(0 0 8px #ff9d38);
+    }
+
+    to {
+        transform: scale(1.08);
+        filter: drop-shadow(0 0 20px #ffcf4d);
+    }
+}
+
+/* =========================
+   CHARACTERS
+========================= */
+
+.character {
+    position: absolute;
+    z-index: 4;
+    text-align: center;
+    user-select: none;
+}
+
+.player-character {
+    left: 21%;
+    bottom: 100px;
+    font-size: 72px;
+    filter: drop-shadow(5px 6px 0 #11111c);
+    transition: transform 0.2s;
+}
+
+.enemy-character {
+    right: 20%;
+    bottom: 100px;
+    font-size: 72px;
+    filter: drop-shadow(5px 6px 0 #11111c);
+    transition: transform 0.2s, opacity 0.4s;
+}
+
+.enemy-name {
+    font-size: 13px;
+    color: #ff9090;
+    margin-top: -5px;
+}
+
+.enemy-hp {
+    width: 120px;
+    height: 12px;
+    margin: 7px auto 3px;
+    background: #090910;
+    border: 2px solid #55556c;
+}
+
+.enemy-bar {
+    background: #d73d4f;
+}
+
+#enemyHpText {
+    font-size: 11px;
+    color: #c5c5d8;
+}
+
+.character.attack {
+    animation: attack 0.35s;
+}
+
+@keyframes attack {
+    0% {
+        transform: translateX(0);
+    }
+
+    40% {
+        transform: translateX(45px) scale(1.1);
+    }
+
+    100% {
+        transform: translateX(0);
+    }
+}
+
+.character.hurt {
+    animation: hurt 0.4s;
+}
+
+@keyframes hurt {
+    0%, 100% {
+        transform: translateX(0);
+        filter: drop-shadow(5px 6px 0 #11111c);
+    }
+
+    25% {
+        transform: translateX(-10px);
+        filter: drop-shadow(0 0 15px #ff3e3e);
+    }
+
+    50% {
+        transform: translateX(10px);
+    }
+}
+
+.enemy-defeated {
+    animation: defeat 0.6s forwards;
+}
+
+@keyframes defeat {
+    0% {
+        transform: scale(1);
+        opacity: 1;
+    }
+
+    60% {
+        transform: scale(1.3) rotate(8deg);
+        opacity: 0.8;
+    }
+
+    100% {
+        transform: scale(0);
+        opacity: 0;
+    }
+}
+
+/* =========================
+   ATTACK EFFECTS
+========================= */
+
+.attack-effect {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%) scale(0);
+    font-size: 60px;
+    z-index: 10;
+    opacity: 0;
+}
+
+.attack-effect.active {
+    animation: attackEffect 0.45s;
+}
+
+@keyframes attackEffect {
+    0% {
+        transform: translate(-50%, -50%) scale(0);
+        opacity: 0;
+    }
+
+    40% {
+        transform: translate(-50%, -50%) scale(1.5);
+        opacity: 1;
+    }
+
+    100% {
+        transform: translate(-50%, -50%) scale(0.5);
+        opacity: 0;
+    }
+}
+
+.damage-text {
+    position: absolute;
+    right: 28%;
+    bottom: 180px;
+    font-size: 25px;
+    font-weight: bold;
+    color: #ff6262;
+    opacity: 0;
+    z-index: 20;
+}
+
+.damage-text.show {
+    animation: damageFloat 0.8s;
+}
+
+@keyframes damageFloat {
+    0% {
+        transform: translateY(0);
+        opacity: 1;
+    }
+
+    100% {
+        transform: translateY(-50px);
+        opacity: 0;
+    }
+}
+
+/* =========================
+   QUESTION PANEL
+========================= */
+
+.question-panel {
+    margin-top: 18px;
+    background: #171725;
+    border: 4px solid #4a4a66;
+    box-shadow:
+        0 0 0 4px #090910,
+        0 7px 0 #090910;
+    padding: 18px;
+}
+
+.question-header {
+    display: flex;
+    justify-content: space-between;
+    color: #f5d76e;
+    font-size: 13px;
+    border-bottom: 2px solid #35354d;
+    padding-bottom: 10px;
+}
+
+#questionDifficulty {
+    color: #8888a4;
+}
+
+.question {
+    text-align: center;
+    font-size: clamp(24px, 4vw, 34px);
+    font-weight: bold;
+    margin: 20px 0;
+    color: #ffffff;
+}
+
+.answers {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+}
+
+.answer-button {
+    background: #292940;
+    color: #ffffff;
+    border: 3px solid #55556f;
+    padding: 15px;
+    font-size: 20px;
+    cursor: pointer;
+    box-shadow: 0 5px 0 #11111c;
+    transition: transform 0.1s, background 0.15s, border-color 0.15s;
+}
+
+.answer-button:hover:not(:disabled) {
+    background: #3a3a58;
+    border-color: #f5d76e;
+    transform: translateY(-2px);
+}
+
+.answer-button:active:not(:disabled) {
+    transform: translateY(3px);
+    box-shadow: 0 2px 0 #11111c;
+}
+
+.answer-button:disabled {
+    cursor: not-allowed;
+    opacity: 0.7;
+}
+
+.answer-button.correct {
+    background: #267044;
+    border-color: #65e69a;
+}
+
+.answer-button.wrong {
+    background: #782e3b;
+    border-color: #ff6c6c;
+}
+
+.feedback {
+    text-align: center;
+    min-height: 25px;
+    margin-top: 15px;
+    color: #aaaac4;
+    font-size: 13px;
+}
+
+.feedback.good {
+    color: #65e69a;
+}
+
+.feedback.bad {
+    color: #ff7777;
+}
+
+/* =========================
+   GAME MESSAGE
+========================= */
+
+.game-message {
+    position: absolute;
+    inset: 0;
+    background: rgba(5, 5, 12, 0.88);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 100;
+}
+
+.hidden {
+    display: none;
+}
+
+.message-box {
+    width: min(500px, 90%);
+    background: #171725;
+    border: 5px solid #686883;
+    box-shadow:
+        0 0 0 5px #090910,
+        0 15px 30px #000000;
+    padding: 35px;
+    text-align: center;
+}
+
+#messageIcon {
+    font-size: 70px;
+    margin-bottom: 10px;
+}
+
+.message-box h2 {
+    color: #f5d76e;
+    font-size: 32px;
+    margin: 5px 0 15px;
+}
+
+.message-box p {
+    color: #c5c5d8;
+    line-height: 1.6;
+}
+
+#restartButton {
+    margin-top: 20px;
+    background: #f5d76e;
+    color: #171725;
+    border: 3px solid #fff0a5;
+    padding: 14px 25px;
+    font-weight: bold;
+    font-size: 16px;
+    cursor: pointer;
+    box-shadow: 0 5px 0 #75631e;
+}
+
+#restartButton:hover {
+    background: #fff09a;
+    transform: translateY(-2px);
+}
+
+/* =========================
+   LEVEL UP
+========================= */
+
+.level-up {
+    animation: levelUp 0.8s;
+}
+
+@keyframes levelUp {
+    0% {
+        transform: scale(1);
+    }
+
+    50% {
+        transform: scale(1.25);
+        color: #fff4a3;
+        text-shadow: 0 0 20px #ffd93d;
+    }
+
+    100% {
+        transform: scale(1);
+    }
+}
+
+/* =========================
+   RESPONSIVE
+========================= */
+
+@media (max-width: 700px) {
+
+    .game-header {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .player-stats {
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+
+    .stat {
+        grid-template-columns: auto 70px auto;
+    }
+
+    .bar,
+    .xp-bar {
+        width: 70px;
+    }
+
+    .room {
+        height: 350px;
+    }
+
+    .player-character {
+        left: 15%;
+        bottom: 75px;
+        font-size: 55px;
+    }
+
+    .enemy-character {
+        right: 15%;
+        bottom: 75px;
+        font-size: 55px;
+    }
+
+    .answers {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .answer-button {
+        padding: 12px;
+    }
+
+    .torch {
+        font-size: 28px;
+    }
+}
