@@ -1,1415 +1,285 @@
-* {
-    box-sizing: border-box;
-}
+/* =====================================================================
+   MATH DUNGEON – style.css
+   Colours live in :root so you can restyle the whole game quickly.
+   ===================================================================== */
 
 :root {
-    --bg: #08090d;
-    --panel: #11131b;
-    --panel-light: #191c27;
-
-    --border: #343947;
-    --border-light: #4b5060;
-
-    --gold: #e5b84b;
-    --gold-light: #ffe39a;
-
-    --red: #d94a55;
-    --green: #54c58a;
-
-    --text: #e9e8e3;
-    --muted: #858998;
+  --bg: #0b0912;
+  --panel: #1a1630;
+  --panel-2: #241e44;
+  --line: #000;
+  --text: #f3efff;
+  --muted: #a79fc9;
+  --gold: #ffd24a;
+  --green: #43e08a;
+  --red: #ff5a6a;
+  --blue: #5aa9ff;
+  --font: "Courier New", ui-monospace, Menlo, Consolas, monospace;
 }
+
+* { box-sizing: border-box; }
 
 body {
-    margin: 0;
-
-    min-height: 100vh;
-
-    background:
-        radial-gradient(
-            ellipse at top,
-            #1b1d2a 0%,
-            #0b0c11 60%,
-            #050609 100%
-        );
-
-    color: var(--text);
-
-    font-family:
-        "Courier New",
-        monospace;
-
-    display: flex;
-    justify-content: center;
-    align-items: center;
-
-    overflow-x: hidden;
+  margin: 0;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 50% 0%, #241a44 0%, transparent 60%),
+    var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-weight: 700;
+  display: flex;
+  justify-content: center;
+  padding: 12px;
 }
-
-
-/* =========================================
-   MAIN GAME
-========================================= */
 
 #game {
-    width: min(1350px, 96vw);
-    margin: 25px auto;
+  width: 100%;
+  max-width: 720px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
-
-/* =========================================
-   TOP BAR
-========================================= */
-
-.top-bar {
-
-    min-height: 86px;
-
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-
-    padding: 14px 22px;
-
-    background:
-        linear-gradient(
-            180deg,
-            #181a24,
-            #11131b
-        );
-
-    border: 1px solid var(--border);
-
-    box-shadow:
-        0 8px 30px rgba(0, 0, 0, .4),
-        inset 0 1px rgba(255, 255, 255, .03);
+/* ---------- Top bar ---------- */
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
 }
+.topbar h1 { margin: 0; font-size: 1.3rem; color: var(--gold); letter-spacing: 1px; }
+.floor-info { font-size: 0.95rem; color: var(--muted); }
 
-
-.logo {
-    display: flex;
-    align-items: center;
-    gap: 14px;
+/* ---------- Dungeon scene ---------- */
+.stage {
+  position: relative;
+  width: min(100%, 78vh);          /* keeps the scene from getting too tall */
+  aspect-ratio: 2 / 1;
+  margin: 0 auto;
+  border: 4px solid var(--line);
+  box-shadow: 0 0 0 4px #3b3366, 0 6px 0 4px #000;
+  background: #000;
+  overflow: hidden;
 }
-
-
-.logo-icon {
-
-    width: 46px;
-    height: 46px;
-
-    display: grid;
-    place-items: center;
-
-    background: #242735;
-
-    border: 1px solid #555b6d;
-
-    color: var(--gold);
-
-    font-size: 25px;
-
-    box-shadow:
-        inset 0 0 15px rgba(229, 184, 75, .08);
+#scene {
+  width: 100%;
+  height: 100%;
+  display: block;
+  image-rendering: pixelated;     /* keeps the pixel-art crisp */
 }
-
-
-.logo h1 {
-
-    margin: 0;
-
-    color: #f1eee6;
-
-    font-size: 21px;
-
-    letter-spacing: 3px;
+.stage::after {                    /* red flash when the hero is hurt */
+  content: "";
+  position: absolute; inset: 0;
+  background: rgba(255, 40, 60, 0.55);
+  opacity: 0;
+  pointer-events: none;
 }
+.stage.hurt::after { animation: hurtFlash 0.45s ease-out; }
+.stage.shake { animation: shake 0.35s; }
 
-
-.logo p {
-
-    margin: 5px 0 0;
-
-    color: var(--gold);
-
-    font-size: 10px;
-
-    letter-spacing: 2px;
+/* Big text banner (floor intro, level up…) */
+.banner {
+  position: absolute; inset: 0;
+  display: grid; place-content: center;
+  text-align: center;
+  pointer-events: none;
+  opacity: 0;
+  text-shadow: 3px 3px 0 #000, -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000;
 }
+.banner strong { font-size: clamp(1.4rem, 5vw, 2.4rem); color: var(--gold); }
+.banner span { font-size: clamp(0.9rem, 2.5vw, 1.2rem); color: #fff; margin-top: 4px; }
+.banner.show { animation: bannerPop 1.6s ease both; }
 
-
-/* =========================================
-   STATS
-========================================= */
-
-.stats {
-
-    display: flex;
-
-    align-items: center;
-
-    gap: 20px;
+/* ---------- HP / XP bars ---------- */
+.status { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.card {
+  background: var(--panel);
+  border: 3px solid #000;
+  box-shadow: 0 0 0 3px #3b3366;
+  padding: 8px 10px;
+  display: flex; flex-direction: column; gap: 6px;
 }
-
-
-.stat {
-
-    display: grid;
-
-    grid-template-columns:
-        auto 100px auto;
-
-    gap: 8px;
-
-    align-items: center;
-
-    font-size: 11px;
-}
-
-
-.stat-label {
-
-    color: #999eac;
-
-    font-weight: bold;
-}
-
-
+.card-title { display: flex; justify-content: space-between; font-size: 0.95rem; }
+.enemy-card.boss { box-shadow: 0 0 0 3px var(--red); }
+.enemy-card.boss #enemy-tag { color: var(--red); }
+.bar-row { display: flex; align-items: center; gap: 8px; }
+.icon { font-size: 1.1rem; width: 1.4rem; text-align: center; }
 .bar {
-
-    width: 100px;
-    height: 10px;
-
-    background: #07080c;
-
-    border: 1px solid #414654;
-
-    padding: 1px;
-}
-
-
-.hp-fill {
-
-    height: 100%;
-
-    width: 100%;
-
-    background:
-        linear-gradient(
-            90deg,
-            #a92f3b,
-            #e45760
-        );
-
-    transition: width .3s ease;
-}
-
-
-.xp-bar {
-
-    background: #07080c;
-}
-
-
-.xp #xpBar {
-
-    width: 0%;
-    height: 100%;
-
-    background:
-        linear-gradient(
-            90deg,
-            #b38a25,
-            #f1ca59
-        );
-
-    transition: width .3s ease;
-}
-
-
-.level-box {
-
-    min-width: 52px;
-
-    padding: 9px 11px;
-
-    background: #222530;
-
-    border: 1px solid #484e5e;
-
-    text-align: center;
-
-    color: var(--gold);
-
-    font-size: 11px;
-}
-
-
-.level-box strong {
-
-    display: block;
-
-    font-size: 18px;
-
-    color: #fff;
-}
-
-
-/* =========================================
-   GAME LAYOUT
-========================================= */
-
-.game-layout {
-
-    display: grid;
-
-    grid-template-columns:
-        minmax(600px, 1fr)
-        270px;
-
-    gap: 16px;
-
-    margin-top: 16px;
-}
-
-
-/* =========================================
-   DUNGEON
-========================================= */
-
-.dungeon-wrapper {
-
-    min-width: 0;
-}
-
-
-#dungeon {
-
-    position: relative;
-
-    width: 100%;
-
-    aspect-ratio: 16 / 10;
-
-    min-height: 540px;
-
-    overflow: hidden;
-
-    background-color: #1c1d24;
-
-    border: 12px solid #0a0b0f;
-
-    box-shadow:
-        inset 0 0 0 2px #484b57,
-        inset 0 0 70px rgba(0, 0, 0, .7),
-        0 10px 30px rgba(0, 0, 0, .5);
-}
-
-
-/*
-    Dungeon floor grid.
-*/
-
-#dungeon::after {
-
-    content: "";
-
-    position: absolute;
-
-    inset: 0;
-
-    pointer-events: none;
-
-    z-index: 1;
-
-    background-image:
-        linear-gradient(
-            rgba(255,255,255,.025) 1px,
-            transparent 1px
-        ),
-        linear-gradient(
-            90deg,
-            rgba(255,255,255,.025) 1px,
-            transparent 1px
-        );
-
-    background-size: 48px 48px;
-}
-
-
-/* =========================================
-   WALLS
-========================================= */
-
-.wall {
-
-    position: absolute;
-
-    background:
-        repeating-linear-gradient(
-            90deg,
-            #262832 0,
-            #262832 44px,
-            #30333e 45px,
-            #30333e 48px
-        );
-
-    z-index: 5;
-
-    box-shadow:
-        inset 0 -3px rgba(0,0,0,.35);
-}
-
-
-.wall-top {
-
-    top: 0;
-    left: 0;
-    right: 0;
-
-    height: 30px;
-}
-
-
-.wall-bottom {
-
-    bottom: 0;
-    left: 0;
-    right: 0;
-
-    height: 30px;
-}
-
-
-.wall-left {
-
-    top: 0;
-    bottom: 0;
-    left: 0;
-
-    width: 30px;
-
-    background:
-        repeating-linear-gradient(
-            0deg,
-            #262832 0,
-            #262832 44px,
-            #30333e 45px,
-            #30333e 48px
-        );
-}
-
-
-.wall-right {
-
-    top: 0;
-    bottom: 0;
-    right: 0;
-
-    width: 30px;
-
-    background:
-        repeating-linear-gradient(
-            0deg,
-            #262832 0,
-            #262832 44px,
-            #30333e 45px,
-            #30333e 48px
-        );
-}
-
-
-/* =========================================
-   GRID TILES
-========================================= */
-
-.tile {
-
-    position: absolute;
-
-    width: 48px;
-    height: 48px;
-
-    z-index: 3;
-
-    display: grid;
-
-    place-items: center;
-
-    transition:
-        transform .12s ease,
-        filter .15s ease;
-}
-
-
-.tile.floor {
-
-    background:
-        linear-gradient(
-            135deg,
-            rgba(255,255,255,.015),
-            rgba(0,0,0,.05)
-        );
-}
-
-
-.tile.wall-tile {
-
-    background:
-        linear-gradient(
-            135deg,
-            #30333e,
-            #1f2129
-        );
-
-    border: 1px solid #3d414d;
-
-    box-shadow:
-        inset 0 0 10px rgba(0,0,0,.4);
-}
-
-
-/* =========================================
-   PLAYER
-========================================= */
-
-.player {
-
-    z-index: 20;
-
-    font-size: 30px;
-
-    filter:
-        drop-shadow(
-            0 4px 2px rgba(0,0,0,.7)
-        );
-
-    transition:
-        left .12s linear,
-        top .12s linear,
-        transform .15s;
-}
-
-
-.player::after {
-
-    content: "";
-
-    position: absolute;
-
-    width: 26px;
-    height: 7px;
-
-    bottom: 3px;
-
-    left: 50%;
-
-    transform: translateX(-50%);
-
-    background: rgba(0,0,0,.55);
-
-    border-radius: 50%;
-
-    z-index: -1;
-}
-
-
-.player.moving {
-
-    transform: translateY(-3px);
-}
-
-
-.player.attack {
-
-    animation: playerAttack .3s;
-}
-
-
-@keyframes playerAttack {
-
-    0% {
-        transform: translateX(0);
-    }
-
-    50% {
-        transform: translateX(12px) scale(1.15);
-    }
-
-    100% {
-        transform: translateX(0);
-    }
-}
-
-
-/* =========================================
-   ENEMIES
-========================================= */
-
-.enemy {
-
-    z-index: 15;
-
-    font-size: 28px;
-
-    cursor: pointer;
-
-    filter:
-        drop-shadow(
-            0 5px 3px rgba(0,0,0,.65)
-        );
-
-    animation:
-        enemyIdle 1.8s ease-in-out infinite;
-}
-
-
-.enemy:hover {
-
-    filter:
-        drop-shadow(
-            0 0 8px rgba(229,184,75,.6)
-        );
-}
-
-
-.enemy.boss {
-
-    font-size: 38px;
-
-    animation:
-        bossIdle 1.3s ease-in-out infinite;
-}
-
-
-@keyframes enemyIdle {
-
-    0%, 100% {
-        transform: translateY(0);
-    }
-
-    50% {
-        transform: translateY(-3px);
-    }
-}
-
-
-@keyframes bossIdle {
-
-    0%, 100% {
-        transform: translateY(0) scale(1);
-    }
-
-    50% {
-        transform: translateY(-5px) scale(1.05);
-    }
-}
-
-
-.enemy-name-tag {
-
-    position: absolute;
-
-    top: -14px;
-    left: 50%;
-
-    transform: translateX(-50%);
-
-    white-space: nowrap;
-
-    font-size: 7px;
-
-    color: #c9cbd3;
-
-    opacity: .7;
-}
-
-
-.enemy.dead {
-
-    animation:
-        enemyDeath .45s forwards;
-}
-
-
-@keyframes enemyDeath {
-
-    0% {
-        opacity: 1;
-        transform: scale(1);
-    }
-
-    60% {
-        opacity: .8;
-        transform: scale(1.35);
-    }
-
-    100% {
-        opacity: 0;
-        transform: scale(0);
-    }
-}
-
-
-/* =========================================
-   TORCHES
-========================================= */
-
-.torch {
-
-    position: absolute;
-
-    z-index: 10;
-
-    font-size: 24px;
-
-    filter:
-        drop-shadow(
-            0 0 10px #ff9e32
-        );
-
-    animation:
-        torchFlicker .7s infinite alternate;
-}
-
-
-@keyframes torchFlicker {
-
-    from {
-        transform: scale(.95);
-        filter: drop-shadow(0 0 5px #ff8b20);
-    }
-
-    to {
-        transform: scale(1.08);
-        filter: drop-shadow(0 0 16px #ffc34e);
-    }
-}
-
-
-/* =========================================
-   EXIT
-========================================= */
-
-.exit {
-
-    z-index: 8;
-
-    font-size: 20px;
-
-    color: var(--gold);
-
-    text-shadow:
-        0 0 10px rgba(229,184,75,.5);
-}
-
-
-/* =========================================
-   MOVEMENT HINT
-========================================= */
-
-.controls-hint {
-
-    margin-top: 8px;
-
-    padding: 9px 12px;
-
-    background: #0e1016;
-
-    border: 1px solid #2d303a;
-
-    color: #6f7482;
-
-    text-align: center;
-
-    font-size: 9px;
-
-    letter-spacing: 1px;
-}
-
-
-.controls-hint span {
-
-    color: var(--gold);
-}
-
-
-.separator {
-
-    color: #3f424d !important;
-
-    margin: 0 8px;
-}
-
-
-/* =========================================
-   SIDE PANEL
-========================================= */
-
-.side-panel {
-
-    background: #11131a;
-
-    border: 1px solid var(--border);
-
-    min-height: 540px;
-}
-
-
-.panel-section {
-
-    padding: 20px;
-
-    border-bottom: 1px solid #2b2e38;
-}
-
-
-.panel-title {
-
-    color: #6f7483;
-
-    font-size: 9px;
-
-    letter-spacing: 2px;
-
-    margin-bottom: 13px;
-}
-
-
-.panel-title span {
-
-    color: var(--gold);
-
-    margin-right: 5px;
-}
-
-
-.objective h2 {
-
-    margin: 0;
-
-    font-size: 15px;
-
-    line-height: 1.5;
-
-    color: #e9e7e0;
-}
-
-
-.objective p {
-
-    color: #777c89;
-
-    font-size: 10px;
-
-    line-height: 1.7;
-
-    margin: 10px 0 20px;
-}
-
-
-.progress-text {
-
-    display: flex;
-
-    justify-content: space-between;
-
-    font-size: 9px;
-
-    color: #656a78;
-}
-
-
-.progress-text strong {
-
-    color: var(--red);
-}
-
-
-/* =========================================
-   HERO CARD
-========================================= */
-
-.hero-display {
-
-    display: flex;
-
-    align-items: center;
-
-    gap: 12px;
-}
-
-
-.hero-icon {
-
-    width: 50px;
-    height: 50px;
-
-    display: grid;
-
-    place-items: center;
-
-    background: #20232e;
-
-    border: 1px solid #424754;
-
-    font-size: 28px;
-}
-
-
-.hero-display strong {
-
-    display: block;
-
-    color: #d9d8d2;
-
-    font-size: 11px;
-}
-
-
-.hero-display span {
-
-    display: block;
-
-    margin-top: 6px;
-
-    color: #6e7380;
-
-    font-size: 8px;
-}
-
-
-.hero-display b {
-
-    color: var(--gold);
-}
-
-
-/* =========================================
-   STATUS
-========================================= */
-
-.message-section {
-
-    min-height: 130px;
-}
-
-
-#statusMessage {
-
-    margin: 0;
-
-    color: #9b9eaa;
-
-    font-size: 10px;
-
-    line-height: 1.7;
-}
-
-
-/* =========================================
-   LEGEND
-========================================= */
-
-.legend {
-
-    display: grid;
-
-    grid-template-columns: 1fr 1fr;
-
-    gap: 10px;
-
-    padding: 18px;
-
-    color: #686d7b;
-
-    font-size: 8px;
-}
-
-
-.legend-player {
-
-    color: #63c9ff;
-}
-
-
-.legend-enemy {
-
-    color: #e85b64;
-}
-
-
-.legend-exit {
-
-    color: var(--gold);
-}
-
-
-/* =========================================
-   BATTLE PANEL
-========================================= */
-
-.battle-panel {
-
-    margin-top: 16px;
-
-    background:
-        linear-gradient(
-            135deg,
-            #181b25,
-            #0e1016
-        );
-
-    border: 1px solid #454a58;
-
-    box-shadow:
-        0 15px 40px rgba(0,0,0,.45);
-}
-
-
-.battle-panel.hidden {
-
-    display: none;
-}
-
-
-.battle-header {
-
-    display: flex;
-
-    justify-content: space-between;
-
-    align-items: center;
-
-    padding: 17px 22px;
-
-    border-bottom: 1px solid #303440;
-}
-
-
-.battle-label {
-
-    color: var(--gold);
-
-    font-size: 8px;
-
-    letter-spacing: 2px;
-}
-
-
-.battle-header h2 {
-
-    margin: 5px 0 0;
-
-    font-size: 16px;
-
-    color: #f0eee8;
-}
-
-
-.enemy-battle-hp {
-
-    width: 180px;
-
-    font-size: 8px;
-
-    color: #777c89;
-}
-
-
-.battle-hp-bar {
-
-    height: 8px;
-
-    background: #07080c;
-
-    border: 1px solid #3d414c;
-
-    margin: 5px 0;
-}
-
-
-#enemyHpBar {
-
-    height: 100%;
-
-    width: 100%;
-
-    background: var(--red);
-
-    transition: width .3s;
-}
-
-
-.enemy-battle-hp strong {
-
-    color: #c9cbd1;
-
-    font-size: 9px;
-}
-
-
-/* =========================================
-   MATH AREA
-========================================= */
-
-.question-area {
-
-    padding: 26px;
-
-    text-align: center;
-}
-
-
-.math-badge {
-
-    display: inline-block;
-
-    padding: 5px 10px;
-
-    background: #292d39;
-
-    border: 1px solid #4a4e5c;
-
-    color: var(--gold);
-
-    font-size: 8px;
-
-    letter-spacing: 2px;
-}
-
-
-#question {
-
-    margin: 20px 0;
-
-    font-size: clamp(22px, 4vw, 32px);
-
-    color: #f4f2ec;
-
-    font-weight: bold;
-}
-
-
-#answers {
-
-    display: grid;
-
-    grid-template-columns:
-        repeat(4, 1fr);
-
-    gap: 10px;
-
-    max-width: 800px;
-
-    margin: auto;
-}
-
+  position: relative; flex: 1;
+  height: 22px;
+  background: #0a0816;
+  border: 3px solid #000;
+  overflow: hidden;
+}
+.bar.small { height: 16px; }
+.fill { height: 100%; width: 100%; transition: width 0.45s ease; }
+.fill.hp { background: linear-gradient(#ff7a85, #e23c4d); }
+.fill.hp.low { background: linear-gradient(#ffb06a, #ff6a2a); animation: pulse 0.7s infinite alternate; }
+.fill.enemy { background: linear-gradient(#c58bff, #8a45d6); }
+.fill.xp { background: linear-gradient(#ffe27a, #e6a91c); }
+.bar-text {
+  position: absolute; inset: 0;
+  display: grid; place-items: center;
+  font-size: 0.75rem; color: #fff;
+  text-shadow: 1px 1px 0 #000;
+}
+
+/* ---------- Question panel ---------- */
+.question-panel {
+  background: var(--panel-2);
+  border: 4px solid #000;
+  box-shadow: 0 0 0 4px #3b3366, 0 6px 0 4px #000;
+  padding: 14px;
+  text-align: center;
+  margin-bottom: 8px;
+}
+.question-type { margin: 0 0 4px; color: var(--muted); font-size: 0.9rem; letter-spacing: 1px; text-transform: uppercase; }
+.question-text { margin: 0 0 14px; font-size: clamp(1.3rem, 4.5vw, 2rem); }
+.question-text .expr {
+  color: var(--gold);
+  font-size: 1.25em;
+  white-space: nowrap;
+}
+.question-text.wordy { font-size: clamp(1.05rem, 3.6vw, 1.5rem); line-height: 1.35; }
+.question-text .expr.long { font-size: 1.05em; white-space: normal; }
+.answers { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 
 .answer {
-
-    padding: 15px;
-
-    background: #20232e;
-
-    border: 1px solid #4a4f5e;
-
-    color: #e7e6e1;
-
-    font-family: inherit;
-
-    font-size: 17px;
-
-    cursor: pointer;
-
-    transition:
-        background .15s,
-        border .15s,
-        transform .1s;
+  display: flex; align-items: center; justify-content: center; gap: 12px;
+  padding: 14px 10px;
+  font: 800 clamp(1.4rem, 5vw, 2rem) / 1 var(--font);
+  color: var(--text);
+  background: linear-gradient(#3f3480, #2b2358);
+  border: 3px solid #000;
+  box-shadow: inset 0 3px 0 rgba(255,255,255,0.18), inset 0 -4px 0 rgba(0,0,0,0.35), 0 4px 0 #000;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: transform 0.08s, background 0.15s;
 }
-
-
-.answer:hover:not(:disabled) {
-
-    background: #2a2e3b;
-
-    border-color: var(--gold);
-
-    transform: translateY(-2px);
+.answer .key {
+  font-size: 0.6em; color: var(--muted);
+  border: 2px solid var(--muted); padding: 2px 6px;
 }
+.answer:hover:not(:disabled) { transform: translateY(-2px); background: linear-gradient(#5043a6, #372d72); }
+.answer:active:not(:disabled) { transform: translateY(3px); box-shadow: inset 0 3px 0 rgba(255,255,255,0.18), 0 1px 0 #000; }
+.answer:disabled { cursor: default; }
+.answer:disabled:not(.correct):not(.wrong) { opacity: 0.5; }
+.answer.correct { background: linear-gradient(#34d27a, #1d8c4c); animation: pop 0.4s; }
+.answer.wrong { background: linear-gradient(#e24b5a, #9b2434); animation: wobble 0.4s; }
 
+.feedback { min-height: 3.6em; margin-top: 12px; font-size: 1rem; line-height: 1.4; }
+.feedback .main { display: block; }
+.feedback .explain { display: block; margin-top: 4px; color: var(--gold); }
+.feedback.good .main { color: var(--green); }
+.feedback.bad .main { color: var(--red); }
 
-.answer:disabled {
-
-    cursor: default;
-
-    opacity: .7;
+/* ---------- Buttons ---------- */
+.btn {
+  font: 800 1.2rem var(--font);
+  color: #1a1000;
+  background: linear-gradient(#ffe27a, #e6a91c);
+  border: 3px solid #000;
+  box-shadow: inset 0 3px 0 rgba(255,255,255,0.5), 0 4px 0 #000;
+  padding: 12px 22px;
+  cursor: pointer;
+  touch-action: manipulation;
 }
+.btn:hover { filter: brightness(1.1); }
+.btn:active { transform: translateY(3px); box-shadow: inset 0 3px 0 rgba(255,255,255,0.5), 0 1px 0 #000; }
+.btn.small { font-size: 0.95rem; padding: 8px 16px; margin-top: 6px; }
+.btn[hidden] { display: none; }
 
-
-.answer.correct {
-
-    background: #245c45;
-
-    border-color: #59c88e;
+.btn.alt {
+  color: var(--text);
+  background: linear-gradient(#4a3f8f, #322a66);
+  box-shadow: inset 0 3px 0 rgba(255,255,255,0.2), 0 4px 0 #000;
 }
+.btn-row { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; }
 
-
-.answer.wrong {
-
-    background: #632d35;
-
-    border-color: #e85b64;
+/* ---------- Level picker (title screen) ---------- */
+.overlay-box .choose { color: var(--gold); font-size: 1.05rem; margin-bottom: 10px; }
+.mode-list { display: flex; flex-direction: column; gap: 12px; margin-bottom: 14px; }
+.mode-btn {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 4px;
+  text-align: left;
+  padding: 12px 14px;
+  font-family: var(--font);
+  color: var(--text);
+  background: linear-gradient(#3f3480, #2b2358);
+  border: 3px solid #000;
+  border-left-width: 10px;
+  box-shadow: inset 0 3px 0 rgba(255,255,255,0.15), 0 4px 0 #000;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: transform 0.08s, filter 0.15s;
 }
+.mode-btn strong { font-size: 1.25rem; }
+.mode-btn span { font-size: 0.9rem; color: var(--muted); font-weight: 700; }
+.mode-btn.easy { border-left-color: var(--green); }
+.mode-btn.medium { border-left-color: var(--gold); }
+.mode-btn.hard { border-left-color: var(--red); }
+.mode-btn:hover { transform: translateY(-2px); filter: brightness(1.2); }
+.mode-btn:active { transform: translateY(3px); box-shadow: inset 0 3px 0 rgba(255,255,255,0.15), 0 1px 0 #000; }
 
-
-#feedback {
-
-    min-height: 20px;
-
-    margin-top: 14px;
-
-    color: #777c89;
-
-    font-size: 9px;
-}
-
-
-#feedback.good {
-
-    color: var(--green);
-}
-
-
-#feedback.bad {
-
-    color: #ee737b;
-}
-
-
-/* =========================================
-   OVERLAY
-========================================= */
-
+/* ---------- Full-screen overlays ---------- */
 .overlay {
+  position: fixed; inset: 0; z-index: 10;
+  display: grid; place-items: center;
+  background: rgba(5, 3, 12, 0.88);
+  padding: 16px;
+}
+.overlay[hidden] { display: none; }
+.overlay-box {
+  width: min(100%, 460px);
+  text-align: center;
+  background: var(--panel);
+  border: 4px solid #000;
+  box-shadow: 0 0 0 4px #3b3366, 0 8px 0 4px #000;
+  padding: 24px 20px;
+  animation: boxIn 0.4s ease-out;
+}
+.overlay-box.lose { box-shadow: 0 0 0 4px var(--red), 0 8px 0 4px #000; }
+.overlay-box.win { box-shadow: 0 0 0 4px var(--gold), 0 8px 0 4px #000; }
+.overlay-box .big { margin: 0 0 12px; font-size: 2rem; color: var(--gold); }
+.overlay-box.lose .big { color: var(--red); }
+.overlay-box p { line-height: 1.5; margin: 0 0 12px; }
+.overlay-box .hint { color: var(--muted); font-size: 0.85rem; }
+.overlay-box .stats { color: var(--gold); white-space: pre-line; }
+.trophy { font-size: 4rem; animation: bounce 0.9s infinite alternate ease-in-out; }
 
-    position: fixed;
+/* ---------- Animations ---------- */
+@keyframes shake {
+  0%, 100% { transform: translate(0, 0); }
+  20% { transform: translate(-6px, 2px); }
+  40% { transform: translate(5px, -3px); }
+  60% { transform: translate(-4px, 3px); }
+  80% { transform: translate(3px, -2px); }
+}
+@keyframes hurtFlash { from { opacity: 1; } to { opacity: 0; } }
+@keyframes bannerPop {
+  0%   { opacity: 0; transform: scale(0.6); }
+  15%  { opacity: 1; transform: scale(1.12); }
+  25%  { transform: scale(1); }
+  80%  { opacity: 1; }
+  100% { opacity: 0; transform: scale(1.05); }
+}
+@keyframes pop { 50% { transform: scale(1.08); } }
+@keyframes wobble {
+  20% { transform: translateX(-6px); } 40% { transform: translateX(6px); }
+  60% { transform: translateX(-4px); } 80% { transform: translateX(4px); }
+}
+@keyframes pulse { to { filter: brightness(1.35); } }
+@keyframes boxIn { from { transform: scale(0.85); opacity: 0; } }
+@keyframes bounce { to { transform: translateY(-12px) rotate(4deg); } }
 
-    inset: 0;
-
-    z-index: 1000;
-
-    display: grid;
-
-    place-items: center;
-
-    background:
-        rgba(3,4,7,.88);
-
-    backdrop-filter: blur(5px);
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
 
-
-.overlay.hidden {
-
-    display: none;
-}
-
-
-.result-card {
-
-    width: min(430px, 90vw);
-
-    padding: 42px;
-
-    background:
-        linear-gradient(
-            145deg,
-            #1a1d27,
-            #0e1016
-        );
-
-    border: 1px solid #555b6a;
-
-    box-shadow:
-        0 25px 80px rgba(0,0,0,.7);
-
-    text-align: center;
-}
-
-
-.result-icon {
-
-    font-size: 65px;
-
-    margin-bottom: 12px;
-}
-
-
-.result-small {
-
-    color: var(--gold);
-
-    font-size: 8px;
-
-    letter-spacing: 3px;
-}
-
-
-.result-card h2 {
-
-    margin: 10px 0;
-
-    color: #f2f0e9;
-
-    font-size: 30px;
-}
-
-
-.result-card p {
-
-    color: #898e9b;
-
-    font-size: 11px;
-
-    line-height: 1.8;
-}
-
-
-#restartButton {
-
-    margin-top: 20px;
-
-    padding: 13px 25px;
-
-    background: var(--gold);
-
-    border: 0;
-
-    color: #17130a;
-
-    font-family: inherit;
-
-    font-weight: bold;
-
-    cursor: pointer;
-
-    letter-spacing: 1px;
-
-    transition:
-        transform .1s,
-        background .15s;
-}
-
-
-#restartButton:hover {
-
-    background: var(--gold-light);
-
-    transform: translateY(-2px);
-}
-
-
-/* =========================================
-   RESPONSIVE
-========================================= */
-
-@media (max-width: 950px) {
-
-    .game-layout {
-
-        grid-template-columns: 1fr;
-    }
-
-    .side-panel {
-
-        min-height: auto;
-
-        display: grid;
-
-        grid-template-columns:
-            1fr 1fr;
-    }
-
-    .panel-section {
-
-        border-bottom: 1px solid #2b2e38;
-    }
-
-    .legend {
-
-        grid-column: 1 / -1;
-    }
-}
-
-
-@media (max-width: 700px) {
-
-    #game {
-
-        width: 100%;
-
-        margin: 0;
-    }
-
-
-    .top-bar {
-
-        flex-direction: column;
-
-        align-items: stretch;
-
-        gap: 15px;
-    }
-
-
-    .stats {
-
-        justify-content: center;
-
-        flex-wrap: wrap;
-    }
-
-
-    .game-layout {
-
-        margin-top: 8px;
-    }
-
-
-    #dungeon {
-
-        min-height: 400px;
-
-        border-width: 8px;
-    }
-
-
-    .side-panel {
-
-        grid-template-columns: 1fr;
-    }
-
-
-    #answers {
-
-        grid-template-columns:
-            repeat(2, 1fr);
-    }
-
-
-    .battle-header {
-
-        flex-direction: column;
-
-        align-items: stretch;
-
-        gap: 15px;
-    }
-
-
-    .enemy-battle-hp {
-
-        width: 100%;
-    }
+/* ---------- Small screens ---------- */
+@media (max-width: 520px) {
+  .status { grid-template-columns: 1fr; }
+  .stage { width: 100%; }
 }
