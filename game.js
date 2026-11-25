@@ -1780,4 +1780,4 @@ document.addEventListener("keydown", function (e) {
 // Title screen (choose a level) shows the first dungeon floor behind it
 fx.background = getBackground(0);
 updateHud();
-requestAnimationFrame(frame);
+requestAnimationFrame(frame); 
