@@ -8,7 +8,7 @@
    3. Math questions      – random question generators
    4. Game state          – everything the game remembers
    5. Page elements       – shortcuts to the HTML
-   6. Game flow           – start, answer, attack, next room, win, lose
+   6. Game flow           – start, walk the grid, answer, attack, combo, win, lose
    7. Screen updates      – bars, text, buttons
    8. Pixel art + canvas  – sprites, background, animations
    9. Start-up
@@ -28,6 +28,10 @@ const CONFIG = {
   baseXp: 10,            // XP for a correct answer on floor 1
   xpPerFloor: 2,         // extra XP per floor
   bossXpBonus: 40,       // bonus XP for beating the boss
+  enemyHpScale: 1.2,          // makes monsters tougher to balance out combo damage
+  comboStepBonus: 0.2,   // every correct answer in a row adds +20% damage...
+  comboMaxSteps: 5,      // ...for up to 5 steps (+100% = double damage)
+  moveCooldownMs: 110,   // time between grid steps (hold a key to keep walking)
   feedbackMs: 4000,      // how long the explanation stays before auto-continue
   timeScale: 1           // 1 = normal speed. Smaller = faster (handy for testing)
 };
@@ -35,6 +39,11 @@ const CONFIG = {
 // XP needed to get from `level` to the next level
 function xpNeeded(level) {
   return 30 + (level - 1) * 20;
+}
+
+// Extra damage from a combo: 0 for combo 0 or 1, then +20% per extra answer in a row
+function comboBonus(combo) {
+  return Math.min(Math.max(combo - 1, 0), CONFIG.comboMaxSteps) * CONFIG.comboStepBonus;
 }
 
 
@@ -440,7 +449,8 @@ function createQuestion(topics, d) {
    4. GAME STATE
    phase is the "traffic light" that stops cheating and double clicks:
      title     – start screen
-     busy      – animations playing, answers are locked
+     explore   – the hero walks around a grid room (arrow keys / WASD / D-pad)
+     busy      – animations playing, everything is locked
      question  – waiting for the player to answer
      feedback  – explaining a wrong answer
      gameover / victory – the end. Only the restart / change-level buttons leave these.
@@ -460,6 +470,9 @@ const state = {
   question: null,
   recent: [],
   feedbackTimer: null,
+  combo: 0,              // correct answers in a row
+  bestCombo: 0,
+  room: null,            // the current grid room (see buildRoom)
   stats: { correct: 0, wrong: 0 }
 };
 
@@ -489,7 +502,10 @@ const els = {
   feedback: $("feedback"), continueBtn: $("continue-btn"),
   titleScreen: $("title-screen"), gameoverScreen: $("gameover-screen"),
   victoryScreen: $("victory-screen"),
-  gameoverStats: $("gameover-stats"), victoryStats: $("victory-stats")
+  gameoverStats: $("gameover-stats"), victoryStats: $("victory-stats"),
+  battlePanel: $("battle-panel"), explorePanel: $("explore-panel"), exploreText: $("explore-text"),
+  comboRow: $("combo-row"), comboPipsBox: $("combo-pips"), comboText: $("combo-text"),
+  comboPips: []
 };
 
 
@@ -512,6 +528,9 @@ function startGame(mode) {
   state.question = null;
   state.recent = [];
   state.stats = { correct: 0, wrong: 0 };
+  state.combo = 0;
+  state.bestCombo = 0;
+  state.room = null;
   state.phase = "busy";
 
   els.titleScreen.hidden = true;
@@ -522,26 +541,187 @@ function startGame(mode) {
   loadRoom();
 }
 
+// Enter a new room: the hero appears on the left side of a grid, the monster waits on the right.
 function loadRoom() {
   const floor = FLOORS[state.floorIndex];
   const m = floor.monsters[state.roomIndex];
   state.enemy = { name: m.name, sprite: m.sprite, damage: m.damage,
-                  isBoss: !!m.isBoss, hp: m.hp, maxHp: m.hp };
+                  isBoss: !!m.isBoss, hp: Math.round(m.hp * CONFIG.enemyHpScale), maxHp: Math.round(m.hp * CONFIG.enemyHpScale) };
   state.difficulty = 0;
   for (let i = 0; i < state.floorIndex; i++) state.difficulty += FLOORS[i].monsters.length;
   state.difficulty += state.roomIndex + MODES[state.mode].boost;
 
-  state.phase = "busy";
+  state.room = buildRoom(state.enemy.isBoss);
   state.question = null;
-  fx.enemy = newActorFx();               // monster walks in
+  state.phase = "explore";               // the player can walk now
+  lastStepAt = 0;
+  fx.enemy = newActorFx();
+  fx.alertT = 0;
   fx.background = getBackground(state.floorIndex);
+  fx.exploreBackground = getExploreBackground(state.floorIndex);
+  placeHero();
+  setView("explore");
   clearQuestionUi();
+  updateExploreText();
   updateHud();
 
-  if (state.enemy.isBoss) showBanner("🐉 BOSS FIGHT!", m.name);
+  if (state.enemy.isBoss) showBanner("🐉 Boss lair", "Something big is waiting…");
   else if (state.roomIndex === 0) showBanner(`🏰 Floor ${state.floorIndex + 1}`, floor.name);
+}
 
+/* ---------- Grid rooms ----------
+   A room is 10 tiles wide. Row 0 is the wall, rows 1-4 are floor.
+   The hero starts on the left, the monster stands on the right, a few
+   pillars block the way and the stairs (locked until the monster is
+   beaten) are in the last column. */
+const GRID = { cols: 10, rows: 5, tile: 32 };
+const DIRS = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
+
+function cellKey(x, y) { return x + "," + y; }
+
+function buildRoom(isBoss) {
+  for (let attempt = 0; attempt < 200; attempt++) {
+    const width = isBoss ? 2 : 1;                         // the dragon is two tiles wide
+    const mx = randInt(5, 8 - (width - 1)), my = randInt(1, 4);
+    const room = {
+      hero: { x: 0, y: randInt(1, 4) },
+      stairs: { x: GRID.cols - 1, y: randInt(1, 4) },
+      monster: { alive: true, cells: [] },
+      pillars: []
+    };
+    for (let i = 0; i < width; i++) room.monster.cells.push({ x: mx + i, y: my });
+
+    const wanted = attempt < 150 ? randInt(3, 5) : 0;      // (0 pillars always works)
+    for (let t = 0; t < 60 && room.pillars.length < wanted; t++) {
+      const p = { x: randInt(2, 8), y: randInt(1, 4) };
+      const nearMonster = room.monster.cells.some(function (c) {
+        return Math.abs(c.x - p.x) + Math.abs(c.y - p.y) <= 1;   // keep the monster's neighbours free
+      });
+      const taken = room.pillars.some(function (q) { return q.x === p.x && q.y === p.y; });
+      if (!nearMonster && !taken) room.pillars.push(p);
+    }
+    if (roomIsSolvable(room)) return room;
+  }
+  throw new Error("could not build a room");             // never happens
+}
+
+// All floor cells the hero can reach from the start (pillars and `extraBlocked` stop him)
+function reachableCells(room, extraBlocked) {
+  const blocked = new Set(room.pillars.map(function (p) { return cellKey(p.x, p.y); }));
+  extraBlocked.forEach(function (c) { blocked.add(cellKey(c.x, c.y)); });
+  const seen = new Set([cellKey(room.hero.x, room.hero.y)]);
+  const queue = [room.hero];
+  while (queue.length > 0) {
+    const c = queue.shift();
+    Object.values(DIRS).forEach(function (d) {
+      const x = c.x + d[0], y = c.y + d[1], k = cellKey(x, y);
+      if (x < 0 || x >= GRID.cols || y < 1 || y >= GRID.rows || blocked.has(k) || seen.has(k)) return;
+      seen.add(k);
+      queue.push({ x: x, y: y });
+    });
+  }
+  return seen;
+}
+
+// The player must be able to reach the monster, and later the stairs
+function roomIsSolvable(room) {
+  const before = reachableCells(room, room.monster.cells.concat([room.stairs]));
+  const canReachMonster = room.monster.cells.some(function (c) {
+    return Object.values(DIRS).some(function (d) { return before.has(cellKey(c.x + d[0], c.y + d[1])); });
+  });
+  const after = reachableCells(room, []);
+  return canReachMonster && after.has(cellKey(room.stairs.x, room.stairs.y));
+}
+
+function isWalkable(x, y) {
+  const room = state.room;
+  if (x < 0 || x >= GRID.cols || y < 1 || y >= GRID.rows) return false;          // wall / edge
+  if (room.pillars.some(function (p) { return p.x === x && p.y === y; })) return false;
+  if (room.monster.alive) {
+    if (room.monster.cells.some(function (c) { return c.x === x && c.y === y; })) return false;
+    if (room.stairs.x === x && room.stairs.y === y) return false;                 // locked door
+  }
+  return true;
+}
+
+function nextToMonster(x, y) {
+  return state.room.monster.alive && state.room.monster.cells.some(function (c) {
+    return Math.abs(c.x - x) + Math.abs(c.y - y) === 1;
+  });
+}
+
+// Move the hero one tile. Called by arrow keys / WASD / the on-screen D-pad.
+let lastStepAt = 0;
+function tryMove(dir) {
+  if (state.phase !== "explore") return;                 // only while exploring
+  const now = performance.now();
+  if (now - lastStepAt < CONFIG.moveCooldownMs * CONFIG.timeScale) return;
+  const d = DIRS[dir], room = state.room;
+  if (d[0] !== 0) fx.hero.facing = d[0];
+  const nx = room.hero.x + d[0], ny = room.hero.y + d[1];
+  if (!isWalkable(nx, ny)) { fx.hero.bump = 1; return; } // wall, pillar or monster in the way
+
+  lastStepAt = now;
+  room.hero.x = nx;
+  room.hero.y = ny;
+
+  if (nextToMonster(nx, ny)) {                           // reached the monster: fight!
+    state.phase = "busy";
+    const mc = room.monster.cells[0];
+    if (mc.x !== nx) fx.hero.facing = mc.x > nx ? 1 : -1;
+    fx.alertT = 1;                                       // "!" above the monster
+    later(startBattle, 600);
+  } else if (!room.monster.alive && nx === room.stairs.x && ny === room.stairs.y) {
+    state.phase = "busy";                                // reached the open stairs
+    burst(fx.hero.x, fx.hero.y - 10, ["#ffd24a", "#ffffff"], 14);
+    later(goToNextRoom, 350);
+  }
+}
+
+function heroTarget() {
+  return { x: state.room.hero.x * GRID.tile + GRID.tile / 2,
+           y: (state.room.hero.y + 1) * GRID.tile - 2 };
+}
+function placeHero() {                                   // put the drawn hero on his tile
+  const t = heroTarget();
+  fx.hero.x = t.x; fx.hero.y = t.y; fx.hero.facing = 1; fx.hero.bump = 0;
+}
+
+function updateExploreText() {
+  els.exploreText.textContent = state.room.monster.alive
+    ? `👾 Find the ${state.enemy.name}!`
+    : "✅ Monster defeated! Take the stairs ⬇";
+}
+
+// Switch between the walking view and the battle view
+function setView(view) {
+  fx.view = view;
+  els.battlePanel.hidden = view !== "battle";
+  els.explorePanel.hidden = view !== "explore";
+}
+
+// The hero touched the monster: switch to the battle scene
+function startBattle() {
+  if (state.phase !== "busy" || fx.view !== "explore") return;
+  fx.enemy = newActorFx();               // the monster slides into the battle scene
+  fx.alertT = 0;
+  setView("battle");
+  clearQuestionUi();
+  if (state.enemy.isBoss) showBanner("🐉 BOSS FIGHT!", state.enemy.name);
   later(askQuestion, 1100);
+}
+
+// The monster is dead: back to walking (or victory after the final boss)
+function afterBattleWon() {
+  const lastFloor = state.floorIndex === FLOORS.length - 1;
+  if (lastFloor && state.roomIndex === FLOORS[state.floorIndex].monsters.length - 1) {
+    winGame();
+    return;
+  }
+  state.room.monster.alive = false;      // the stairs open
+  setView("explore");
+  state.phase = "explore";
+  updateExploreText();
 }
 
 function askQuestion() {
@@ -572,11 +752,15 @@ function showTitle() {
   state.roomIndex = 0;
   state.enemy = null;
   state.question = null;
+  state.room = null;
+  state.combo = 0;
+  state.bestCombo = 0;
   els.gameoverScreen.hidden = true;
   els.victoryScreen.hidden = true;
   els.banner.classList.remove("show");
   resetEffects();
   fx.background = getBackground(0);
+  setView("battle");
   clearQuestionUi();
   updateHud();
   els.titleScreen.hidden = false;
@@ -588,17 +772,23 @@ function playerDamage() {
 
 function handleCorrect() {
   const enemy = state.enemy;
-  const dmg = Math.min(playerDamage(), enemy.hp);
+  state.combo++;                                         // one more correct answer in a row
+  state.bestCombo = Math.max(state.bestCombo, state.combo);
+  const combo = state.combo;
+  const bonus = comboBonus(combo);
+  const dmg = Math.min(Math.round(playerDamage() * (1 + bonus)), enemy.hp);
   const gain = CONFIG.baseXp + state.floorIndex * CONFIG.xpPerFloor;
   state.stats.correct++;
   enemy.hp -= dmg;
 
   // attack animation: hero lunges, monster flashes
   fx.player.lunge = 1;
-  later(function () { hitEnemy(dmg); }, 170);
+  later(function () { hitEnemy(dmg, combo); }, 170);
 
   const leveledUp = addXp(gain);
-  setFeedback("good", `✅ Correct! You deal ${dmg} damage and earn ${gain} XP.`, "");
+  const comboNote = combo >= 2 ? ` 🔥 Combo ×${combo}: +${Math.round(bonus * 100)}% damage!` : "";
+  setFeedback("good", `✅ Correct! You deal ${dmg} damage and earn ${gain} XP.${comboNote}`, "");
+  renderCombo("up");
   updateHud();
 
   const extra = leveledUp ? 1500 : 0;
@@ -609,6 +799,8 @@ function handleCorrect() {
 function handleWrong(q) {
   const enemy = state.enemy;
   const dmg = Math.min(enemy.damage, state.playerHp);
+  const lostCombo = state.combo;
+  state.combo = 0;                                       // a wrong answer breaks the combo
   state.stats.wrong++;
   state.playerHp -= dmg;
 
@@ -616,7 +808,9 @@ function handleWrong(q) {
   fx.enemy.lunge = 1;
   later(function () { hitPlayer(dmg); }, 170);
 
-  setFeedback("bad", `❌ Not quite! ${enemy.name} hits you for ${dmg}.`, `💡 ${q.explanation}`);
+  const lostNote = lostCombo >= 2 ? ` 💔 Combo ×${lostCombo} lost!` : "";
+  setFeedback("bad", `❌ Not quite! ${enemy.name} hits you for ${dmg}.${lostNote}`, `💡 ${q.explanation}`);
+  renderCombo(lostCombo >= 2 ? "lost" : "");
   updateHud();
 
   if (state.playerHp <= 0) {
@@ -665,26 +859,22 @@ function defeatEnemy() {
   let extra = 0;
   if (enemy.isBoss && addXp(CONFIG.bossXpBonus)) extra = 1500;
   updateHud();
-  later(goToNextRoom, 1200 + extra);
+  later(afterBattleWon, 1200 + extra);
 }
 
+// The hero stepped on the open stairs: go to the next room (or the next floor)
 function goToNextRoom() {
   const floor = FLOORS[state.floorIndex];
   if (state.roomIndex < floor.monsters.length - 1) {
     state.roomIndex++;                                   // next room on this floor
-  } else if (state.floorIndex < FLOORS.length - 1) {
+  } else {
     state.floorIndex++;                                  // go down a floor
     state.roomIndex = 0;
-  } else {
-    winGame();                                           // the boss was the last room
-    return;
   }
   const heal = Math.min(CONFIG.roomClearHeal, state.playerMaxHp - state.playerHp);
-  if (heal > 0) {
-    state.playerHp += heal;
-    addFloater(`+${heal}`, 56, 55, "#43e08a");
-  }
+  if (heal > 0) state.playerHp += heal;
   loadRoom();
+  if (heal > 0) addFloater(`+${heal}`, fx.hero.x, fx.hero.y - 36, "#43e08a");
 }
 
 function winGame() {
@@ -704,7 +894,8 @@ function statsText() {
   const total = state.stats.correct + state.stats.wrong;
   const accuracy = total === 0 ? 0 : Math.round((state.stats.correct / total) * 100);
   return `${MODES[state.mode].label} · Floor ${state.floorIndex + 1} · Hero Lv ${state.level}\n` +
-         `${state.stats.correct} correct, ${state.stats.wrong} wrong (${accuracy}%)`;
+         `${state.stats.correct} correct, ${state.stats.wrong} wrong (${accuracy}%)\n` +
+         `Best combo: ×${state.bestCombo}`;
 }
 
 
@@ -724,6 +915,7 @@ function updateHud() {
   const need = xpNeeded(state.level);
   els.xpFill.style.width = (state.xp / need) * 100 + "%";
   els.xpText.textContent = `${state.xp}/${need} XP`;
+  renderCombo();
 
   const e = state.enemy;
   if (e) {
@@ -739,6 +931,21 @@ function updateHud() {
     setBar(els.enemyHpFill, 0, 1);
     els.enemyHpText.textContent = "–";
   }
+}
+
+// The combo meter under the XP bar. kind: "up" (pop), "lost" (shake) or nothing (just redraw)
+function renderCombo(kind) {
+  const steps = Math.min(Math.max(state.combo - 1, 0), CONFIG.comboMaxSteps);
+  els.comboPips.forEach(function (pip, i) { pip.classList.toggle("on", i < steps); });
+  const percent = Math.round(comboBonus(state.combo) * 100);
+  if (state.combo === 0) els.comboText.textContent = "No combo";
+  else if (state.combo === 1) els.comboText.textContent = "Combo ×1";
+  else els.comboText.textContent = `Combo ×${state.combo} · +${percent}% dmg` +
+                                   (steps === CONFIG.comboMaxSteps ? " MAX" : "");
+  els.comboRow.classList.toggle("active", state.combo >= 2);
+  els.comboRow.classList.toggle("max", steps === CONFIG.comboMaxSteps);
+  if (kind === "up" && state.combo >= 2) restartCssAnimation(els.comboRow, "pop");
+  if (kind === "lost") restartCssAnimation(els.comboRow, "lost");
 }
 
 function setBar(fillEl, value, max) {
@@ -1053,6 +1260,9 @@ Object.keys(SPRITE_DEFS).forEach(function (name) {
 /* ---------- Animation state ---------- */
 const fx = {
   time: 0, last: 0,
+  view: "battle",                      // "battle" (side view) or "explore" (grid room)
+  hero: { x: 16, y: 80, facing: 1, bump: 0 },   // where the hero is drawn in the grid room
+  alertT: 0,
   player: null, enemy: null,
   particles: [], floaters: [],
   winning: false,
@@ -1068,6 +1278,7 @@ function resetEffects() {
   fx.particles = [];
   fx.floaters = [];
   fx.winning = false;
+  fx.alertT = 0;
 }
 resetEffects();
 fx.enemy.enter = 1;
@@ -1076,10 +1287,13 @@ fx.enemyX = function () {
   return state.enemy && state.enemy.isBoss ? 240 : 256;
 };
 
-function hitEnemy(dmg) {
+function hitEnemy(dmg, combo) {
+  const hot = combo >= 2;                                // combo hits look bigger and hotter
   fx.enemy.flash = 1; fx.enemy.flashColor = "white";
-  addFloater(`-${dmg}`, fx.enemyX(), 60, "#ffd24a");
-  burst(fx.enemyX(), 95, ["#ffffff", "#ffd24a"], 10);
+  addFloater(`-${dmg}`, fx.enemyX(), 60, hot ? "#ff9a3c" : "#ffd24a", hot ? 16 + Math.min(combo - 2, 4) * 2 : 14);
+  if (hot) addFloater(`COMBO ×${combo}`, PLAYER_X + 24, 44, "#ff9a3c", 12);
+  burst(fx.enemyX(), 95, hot ? ["#ffffff", "#ffd24a", "#ff9a3c", "#ff5a2a"] : ["#ffffff", "#ffd24a"],
+        10 + (hot ? Math.min(combo, 6) * 3 : 0));
   shakeStage();
 }
 function hitPlayer(dmg) {
@@ -1094,8 +1308,8 @@ function levelUpEffect() {
   burst(PLAYER_X, 100, ["#ffd24a", "#fff3a0", "#ffffff"], 30, true);
   addFloater("LEVEL UP!", PLAYER_X, 50, "#ffd24a");
 }
-function addFloater(text, x, y, color) {
-  fx.floaters.push({ text: text, x: x, y: y, color: color, age: 0, life: 1.1 });
+function addFloater(text, x, y, color, size) {
+  fx.floaters.push({ text: text, x: x, y: y, color: color, size: size || 14, age: 0, life: 1.1 });
 }
 function burst(x, y, colors, count, goUp) {
   for (let i = 0; i < count; i++) {
@@ -1206,17 +1420,18 @@ function drawTorch(x, seedOffset) {
   ctx.fillStyle = "#ffffff"; ctx.fillRect(x - 1, 42, 2, 3);
 }
 
-function drawShadow(x, width) {
+function drawShadow(x, width, y) {
   ctx.fillStyle = "rgba(0,0,0,0.35)";
   ctx.beginPath();
-  ctx.ellipse(x, FEET_Y + 1, width / 2, 5, 0, 0, Math.PI * 2);
+  ctx.ellipse(x, y === undefined ? FEET_Y + 1 : y, width / 2, 5, 0, 0, Math.PI * 2);
   ctx.fill();
 }
 
 // Draws one sprite with its feet at (cx, feetY)
 function drawSprite(sp, cx, feetY, o) {
-  const w = sp.canvas.width * SPRITE_SCALE;
-  const h = sp.canvas.height * SPRITE_SCALE;
+  const scale = o.scale || SPRITE_SCALE;
+  const w = sp.canvas.width * scale;
+  const h = sp.canvas.height * scale;
   ctx.save();
   ctx.globalAlpha = o.alpha === undefined ? 1 : o.alpha;
   ctx.translate(Math.round(cx), Math.round(feetY));
@@ -1281,9 +1496,9 @@ function drawEffects() {
   });
   ctx.globalAlpha = 1;
 
-  ctx.font = "bold 14px monospace";
   ctx.textAlign = "center";
   fx.floaters.forEach(function (f) {
+    ctx.font = "bold " + f.size + "px monospace";
     ctx.globalAlpha = Math.max(0, 1 - f.age / f.life);
     const y = f.y - f.age * 24;
     ctx.lineWidth = 3; ctx.strokeStyle = "#000";
@@ -1303,6 +1518,13 @@ function updateEffects(dtMs) {
     if (a.enter < 1) a.enter = Math.min(1, a.enter + dtMs / 800);
     if (a.dying && a.deathT < 1) a.deathT = Math.min(1, a.deathT + dtMs / 900);
   });
+  fx.alertT = Math.max(0, fx.alertT - dtMs / 600);
+  fx.hero.bump = Math.max(0, fx.hero.bump - dtMs / 150);
+  if (state.room) {                                      // the drawn hero glides to his tile
+    const t = heroTarget(), k = Math.min(1, dtMs / 70);
+    fx.hero.x += (t.x - fx.hero.x) * k;
+    fx.hero.y += (t.y - fx.hero.y) * k;
+  }
   fx.particles.forEach(function (pt) {
     pt.age += dt; pt.x += pt.vx * dt; pt.y += pt.vy * dt; pt.vy += 220 * dt;
   });
@@ -1319,6 +1541,167 @@ function updateEffects(dtMs) {
   }
 }
 
+function drawBattle() {
+  ctx.drawImage(fx.background, 0, 0);
+  TORCH_XS.forEach((x, i) => drawTorch(x, i * 2));
+  drawActors();
+}
+
+/* ---------- Grid room view (looking down at the room) ---------- */
+const exploreBackgrounds = {};
+function getExploreBackground(floorIndex) {
+  if (!exploreBackgrounds[floorIndex]) {
+    exploreBackgrounds[floorIndex] = buildExploreBackground(FLOORS[floorIndex].colors);
+  }
+  return exploreBackgrounds[floorIndex];
+}
+function buildExploreBackground(colors) {
+  const c = document.createElement("canvas");
+  c.width = W; c.height = H;
+  const g = c.getContext("2d");
+  const T = GRID.tile;
+  let seed = 11;
+  const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+
+  // wall (row 0): small bricks
+  g.fillStyle = colors.mortar;
+  g.fillRect(0, 0, W, T);
+  for (let row = 0; row < 4; row++) {
+    const offset = row % 2 ? -8 : 0;
+    for (let x = offset; x < W; x += 16) {
+      g.fillStyle = shade(colors.brick, (rnd() - 0.5) * 18);
+      g.fillRect(x + 1, row * 8 + 1, 14, 6);
+      g.fillStyle = "rgba(255,255,255,0.07)";
+      g.fillRect(x + 1, row * 8 + 1, 14, 1);
+    }
+  }
+  // floor tiles (rows 1-4)
+  for (let y = 1; y < GRID.rows; y++) {
+    for (let x = 0; x < GRID.cols; x++) {
+      g.fillStyle = shade(colors.floor, ((x + y) % 2 ? 6 : -2) + (rnd() - 0.5) * 6);
+      g.fillRect(x * T, y * T, T, T);
+      g.fillStyle = "rgba(0,0,0,0.35)";
+      g.fillRect(x * T, y * T, T, 1);
+      g.fillRect(x * T, y * T, 1, T);
+      g.fillStyle = "rgba(255,255,255,0.05)";
+      g.fillRect(x * T + 1, y * T + 1, T - 2, 1);
+    }
+  }
+  // shadow under the wall
+  const grad = g.createLinearGradient(0, T, 0, T + 14);
+  grad.addColorStop(0, "rgba(0,0,0,0.5)");
+  grad.addColorStop(1, "rgba(0,0,0,0)");
+  g.fillStyle = grad;
+  g.fillRect(0, T, W, 14);
+  return c;
+}
+
+const EXPLORE_TORCHES = [80, 160, 240];
+function drawWallTorch(x, seedOffset) {
+  const t = fx.time * 9 + seedOffset;
+  const flick = Math.sin(t) + Math.sin(t * 2.3) * 0.7;
+  const glow = ctx.createRadialGradient(x, 16, 2, x, 16, 44 + flick * 3);
+  glow.addColorStop(0, "rgba(255,170,60,0.35)");
+  glow.addColorStop(1, "rgba(255,170,60,0)");
+  ctx.fillStyle = glow;
+  ctx.fillRect(x - 50, 0, 100, 70);
+  ctx.fillStyle = "#1a1220"; ctx.fillRect(x - 3, 20, 6, 3);
+  ctx.fillStyle = "#6b4a2a"; ctx.fillRect(x - 2, 23, 4, 7);
+  ctx.fillStyle = "#e8581e"; ctx.fillRect(x - 3, 9 - flick, 6, 12 + flick);
+  ctx.fillStyle = "#ffa83a"; ctx.fillRect(x - 2, 11 - flick, 4, 10 + flick);
+  ctx.fillStyle = "#ffe27a"; ctx.fillRect(x - 1, 14 - flick, 2, 6);
+}
+
+function drawStairs() {
+  const room = state.room, T = GRID.tile;
+  const x = room.stairs.x * T, y = room.stairs.y * T;
+  const open = !room.monster.alive;
+  ctx.fillStyle = "#000";
+  ctx.fillRect(x + 1, y + 1, T - 2, T - 2);
+  ctx.fillStyle = "#0a0712";
+  ctx.fillRect(x + 3, y + 3, T - 6, T - 6);
+  if (open) {
+    const pulse = 0.5 + 0.5 * Math.sin(fx.time * 5);
+    for (let i = 0; i < 4; i++) {                        // steps going down
+      ctx.fillStyle = ["#4a4068", "#3a3358", "#2a2340", "#1a1530"][i];
+      ctx.fillRect(x + 5, y + 5 + i * 6, T - 10, 5);
+    }
+    const glow = ctx.createRadialGradient(x + T / 2, y + T / 2, 2, x + T / 2, y + T / 2, 26);
+    glow.addColorStop(0, "rgba(255,210,74," + (0.35 * pulse + 0.1) + ")");
+    glow.addColorStop(1, "rgba(255,210,74,0)");
+    ctx.fillStyle = glow;
+    ctx.fillRect(x - 10, y - 10, T + 20, T + 20);
+    ctx.fillStyle = "#ffd24a";
+    ctx.font = "bold 16px monospace";
+    ctx.textAlign = "center";
+    ctx.fillText("▼", x + T / 2, y + T / 2 + 6 + pulse * 2);
+  } else {
+    ctx.fillStyle = "#5a5f70";                           // iron bars: locked
+    for (let i = 0; i < 4; i++) ctx.fillRect(x + 6 + i * 6, y + 4, 3, T - 8);
+    ctx.fillStyle = "#3a3e4c";
+    ctx.fillRect(x + 4, y + 9, T - 8, 3);
+    ctx.fillRect(x + 4, y + T - 13, T - 8, 3);
+  }
+}
+
+function drawPillar(p) {
+  const T = GRID.tile, x = p.x * T, y = p.y * T;
+  ctx.fillStyle = "rgba(0,0,0,0.35)";
+  ctx.fillRect(x + 4, y + T - 6, T - 6, 5);
+  ctx.fillStyle = "#14101f"; ctx.fillRect(x + 4, y + 3, T - 8, T - 6);
+  ctx.fillStyle = "#3a3358"; ctx.fillRect(x + 6, y + 5, T - 12, T - 10);
+  ctx.fillStyle = "#5a5080"; ctx.fillRect(x + 6, y + 5, T - 12, 5);
+  ctx.fillStyle = "rgba(255,255,255,0.12)"; ctx.fillRect(x + 8, y + 12, 2, T - 22);
+}
+
+function drawExploreMonster() {
+  const room = state.room, e = state.enemy, T = GRID.tile;
+  const cell = room.monster.cells[0];
+  const cx = e.isBoss ? (cell.x + 1) * T : cell.x * T + T / 2;   // the dragon covers 2 tiles
+  const feet = (cell.y + 1) * T - 2;
+  const pulse = 0.5 + 0.5 * Math.sin(fx.time * 4);
+  ctx.fillStyle = "rgba(255,60,80," + (0.1 + 0.1 * pulse) + ")";  // danger glow
+  ctx.beginPath();
+  ctx.ellipse(cx, feet, e.isBoss ? 44 : 22, 9, 0, 0, Math.PI * 2);
+  ctx.fill();
+  drawShadow(cx, e.isBoss ? 56 : 24, feet + 1);
+  drawSprite(sprites[e.sprite], cx, feet + Math.sin(fx.time * 3), { scale: e.isBoss ? 3 : 2 });
+}
+
+function drawExploreHero() {
+  const h = fx.hero, t = heroTarget();
+  const moving = Math.abs(t.x - h.x) + Math.abs(t.y - h.y) > 1.5;
+  const hop = moving ? -Math.abs(Math.sin(fx.time * 26)) * 2 : Math.sin(fx.time * 3) * 0.8;
+  const nudge = h.bump > 0 ? Math.sin(h.bump * Math.PI) * 3 * h.facing : 0;   // bonk!
+  drawShadow(h.x, 22, h.y + 1);
+  drawSprite(sprites.hero, h.x + nudge, h.y + hop, { scale: 2, scaleX: h.facing });
+}
+
+function drawExplore() {
+  const room = state.room, T = GRID.tile;
+  ctx.drawImage(fx.exploreBackground, 0, 0);
+  EXPLORE_TORCHES.forEach((x, i) => drawWallTorch(x, i * 2));
+  drawStairs();
+
+  const things = [];                                     // draw top rows first so lower ones overlap
+  room.pillars.forEach(function (p) { things.push({ y: p.y, draw: function () { drawPillar(p); } }); });
+  if (room.monster.alive) things.push({ y: room.monster.cells[0].y, draw: drawExploreMonster });
+  things.push({ y: room.hero.y, draw: drawExploreHero });
+  things.sort(function (a, b) { return a.y - b.y; }).forEach(function (t) { t.draw(); });
+
+  if (fx.alertT > 0 && room.monster.alive) {             // "!" over the monster
+    const cell = room.monster.cells[0];
+    const x = state.enemy.isBoss ? (cell.x + 1) * T : cell.x * T + T / 2;
+    const y = cell.y * T - (state.enemy.isBoss ? 18 : 2) - Math.abs(Math.sin(fx.time * 14)) * 4;
+    ctx.font = "bold 22px monospace";
+    ctx.textAlign = "center";
+    ctx.lineWidth = 4; ctx.strokeStyle = "#000";
+    ctx.strokeText("!", x, y);
+    ctx.fillStyle = "#ff5a6a";
+    ctx.fillText("!", x, y);
+  }
+}
+
 function frame(now) {
   const dt = Math.min(50, now - (fx.last || now));
   fx.last = now;
@@ -1327,9 +1710,8 @@ function frame(now) {
 
   ctx.imageSmoothingEnabled = false;
   ctx.clearRect(0, 0, W, H);
-  ctx.drawImage(fx.background, 0, 0);
-  TORCH_XS.forEach((x, i) => drawTorch(x, i * 2));
-  drawActors();
+  if (fx.view === "explore" && state.room) drawExplore();
+  else drawBattle();
   drawEffects();
   ctx.drawImage(vignette, 0, 0);
   requestAnimationFrame(frame);
@@ -1339,6 +1721,13 @@ function frame(now) {
 /* ======================================================================
    9. START-UP
    ====================================================================== */
+// Combo meter: one little square per combo step
+for (let i = 0; i < CONFIG.comboMaxSteps; i++) {
+  const pip = document.createElement("span");
+  els.comboPips.push(pip);
+  els.comboPipsBox.append(pip);
+}
+
 els.buttons.forEach(function (btn, i) {
   btn.addEventListener("click", function () { onAnswer(i); });
 });
@@ -1351,14 +1740,40 @@ $("victory-restart").addEventListener("click", function () { startGame(); });
 $("gameover-change").addEventListener("click", showTitle);
 $("victory-change").addEventListener("click", showTitle);
 
-// Keyboard: 1–4 answer the question (on the title screen 1–3 pick a level)
+// On-screen D-pad: tap to step, hold to keep walking
+document.querySelectorAll(".dpad-btn").forEach(function (btn) {
+  const dir = btn.dataset.dir;
+  let timer = null;
+  function stop() { clearInterval(timer); timer = null; }
+  btn.addEventListener("pointerdown", function (e) {
+    e.preventDefault();
+    tryMove(dir);
+    stop();
+    timer = setInterval(function () { tryMove(dir); }, CONFIG.moveCooldownMs + 20);
+  });
+  ["pointerup", "pointerleave", "pointercancel", "blur"].forEach(function (name) {
+    btn.addEventListener(name, stop);
+  });
+  btn.addEventListener("click", function (e) { if (e.detail === 0) tryMove(dir); });   // keyboard Enter / Space
+});
+
+// Keyboard:  arrows / WASD walk,  1–4 answer,  (title screen) 1–3 pick a level
+const MOVE_KEYS = { ArrowUp: "up", ArrowDown: "down", ArrowLeft: "left", ArrowRight: "right",
+                    w: "up", s: "down", a: "left", d: "right" };
 document.addEventListener("keydown", function (e) {
-  if (e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
   if (state.phase === "title") {
     const modeKeys = { "1": "easy", "2": "medium", "3": "hard" };
-    if (modeKeys[e.key]) startGame(modeKeys[e.key]);
+    if (!e.repeat && modeKeys[e.key]) startGame(modeKeys[e.key]);
     return;
   }
+  const dir = MOVE_KEYS[e.key.length === 1 ? e.key.toLowerCase() : e.key];
+  if (dir) {
+    e.preventDefault();                  // keep the page from scrolling
+    tryMove(dir);                        // holding the key keeps walking
+    return;
+  }
+  if (e.repeat) return;
   if (e.key >= "1" && e.key <= "4") onAnswer(Number(e.key) - 1);
 });
 

@@ -175,6 +175,56 @@ body {
 .feedback.good .main { color: var(--green); }
 .feedback.bad .main { color: var(--red); }
 
+/* ---------- Combo meter ---------- */
+.combo-row { display: flex; align-items: center; gap: 8px; transform-origin: left center; }
+.combo-pips { display: flex; gap: 4px; }
+.combo-pips span {
+  width: 16px; height: 14px;
+  background: #0a0816;
+  border: 2px solid #000;
+  transition: background 0.2s;
+}
+.combo-pips span.on {
+  background: linear-gradient(#ffd24a, #ff7a2a);
+  box-shadow: 0 0 6px rgba(255, 150, 50, 0.8);
+}
+.combo-text { font-size: 0.8rem; color: var(--muted); }
+.combo-row.active .combo-text { color: #ffb347; }
+.combo-row.max .combo-text { color: var(--gold); animation: pulse 0.6s infinite alternate; }
+.combo-row.pop { animation: comboPop 0.35s; }
+.combo-row.lost { animation: wobble 0.4s; }
+.combo-row.lost .combo-text { color: var(--red); }
+
+/* ---------- Walking panel (D-pad) ---------- */
+.battle-panel, .explore-panel { min-height: 300px; }
+.battle-panel[hidden], .explore-panel[hidden] { display: none; }
+.explore-panel { display: flex; flex-direction: column; justify-content: center; align-items: center; }
+.explore-panel .question-text { margin-bottom: 12px; }
+.explore-panel .hint { margin: 0; color: var(--muted); font-size: 0.85rem; }
+.dpad {
+  display: grid;
+  grid-template-columns: repeat(3, 68px);
+  grid-template-rows: repeat(2, 58px);
+  gap: 8px;
+  margin: 4px 0 12px;
+}
+.dpad-btn {
+  font: 800 1.5rem var(--font);
+  color: var(--text);
+  background: linear-gradient(#3f3480, #2b2358);
+  border: 3px solid #000;
+  box-shadow: inset 0 3px 0 rgba(255,255,255,0.18), inset 0 -4px 0 rgba(0,0,0,0.35), 0 4px 0 #000;
+  cursor: pointer;
+  touch-action: none;
+  user-select: none;
+}
+.dpad-btn:hover { background: linear-gradient(#5043a6, #372d72); }
+.dpad-btn:active { transform: translateY(3px); box-shadow: inset 0 3px 0 rgba(255,255,255,0.18), 0 1px 0 #000; }
+.dpad-btn.up { grid-column: 2; grid-row: 1; }
+.dpad-btn.left { grid-column: 1; grid-row: 2; }
+.dpad-btn.down { grid-column: 2; grid-row: 2; }
+.dpad-btn.right { grid-column: 3; grid-row: 2; }
+
 /* ---------- Buttons ---------- */
 .btn {
   font: 800 1.2rem var(--font);
@@ -271,6 +321,7 @@ body {
   60% { transform: translateX(-4px); } 80% { transform: translateX(4px); }
 }
 @keyframes pulse { to { filter: brightness(1.35); } }
+@keyframes comboPop { 40% { transform: scale(1.15); } }
 @keyframes boxIn { from { transform: scale(0.85); opacity: 0; } }
 @keyframes bounce { to { transform: translateY(-12px) rotate(4deg); } }
 

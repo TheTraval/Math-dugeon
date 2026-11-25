@@ -37,6 +37,11 @@
         <span class="icon">⭐</span>
         <div class="bar small"><div id="xp-fill" class="fill xp"></div><span id="xp-text" class="bar-text">0/30 XP</span></div>
       </div>
+      <div id="combo-row" class="combo-row" title="Answer correctly in a row to build a combo. Each step adds +20% damage.">
+        <span class="icon">🔥</span>
+        <div id="combo-pips" class="combo-pips"></div>
+        <span id="combo-text" class="combo-text">No combo</span>
+      </div>
     </div>
 
     <div id="enemy-card" class="card enemy-card">
@@ -48,20 +53,38 @@
     </div>
   </section>
 
-  <!-- Question panel: the main focus -->
+  <!-- Bottom panel: the question in battle, the D-pad while walking -->
   <section class="question-panel">
-    <p id="question-type" class="question-type">🧮 Get ready…</p>
-    <h2 id="question-text" class="question-text">…</h2>
 
-    <div id="answers" class="answers">
-      <button class="answer" disabled><span class="key">1</span><span class="value">–</span></button>
-      <button class="answer" disabled><span class="key">2</span><span class="value">–</span></button>
-      <button class="answer" disabled><span class="key">3</span><span class="value">–</span></button>
-      <button class="answer" disabled><span class="key">4</span><span class="value">–</span></button>
+    <!-- Battle: the math question is the main focus -->
+    <div id="battle-panel" class="battle-panel">
+      <p id="question-type" class="question-type">🧮 Get ready…</p>
+      <h2 id="question-text" class="question-text">…</h2>
+
+      <div id="answers" class="answers">
+        <button class="answer" disabled><span class="key">1</span><span class="value">–</span></button>
+        <button class="answer" disabled><span class="key">2</span><span class="value">–</span></button>
+        <button class="answer" disabled><span class="key">3</span><span class="value">–</span></button>
+        <button class="answer" disabled><span class="key">4</span><span class="value">–</span></button>
+      </div>
+
+      <div id="feedback" class="feedback" aria-live="polite"></div>
+      <button id="continue-btn" class="btn small" hidden>Continue ▶</button>
     </div>
 
-    <div id="feedback" class="feedback" aria-live="polite"></div>
-    <button id="continue-btn" class="btn small" hidden>Continue ▶</button>
+    <!-- Exploring: walk across the room tile by tile -->
+    <div id="explore-panel" class="explore-panel" hidden>
+      <p class="question-type">🧭 Explore the room</p>
+      <h2 id="explore-text" class="question-text">Find the monster!</h2>
+      <div class="dpad">
+        <button class="dpad-btn up" data-dir="up" aria-label="Move up">▲</button>
+        <button class="dpad-btn left" data-dir="left" aria-label="Move left">◀</button>
+        <button class="dpad-btn down" data-dir="down" aria-label="Move down">▼</button>
+        <button class="dpad-btn right" data-dir="right" aria-label="Move right">▶</button>
+      </div>
+      <p class="hint">Arrow keys or W A S D also work</p>
+    </div>
+
   </section>
 
 </main>
@@ -70,7 +93,7 @@
 <div id="title-screen" class="overlay">
   <div class="overlay-box">
     <h2 class="big">⚔️ Math Dungeon</h2>
-    <p>Answer math questions to hit the monsters.<br>A wrong answer hurts <em>you</em>!</p>
+    <p>Walk to each monster, then answer math questions to hit it.<br>A wrong answer hurts <em>you</em>!</p>
     <p class="choose">🧭 What level do you want to play?</p>
     <div class="mode-list">
       <button class="mode-btn easy" data-mode="easy">
@@ -83,7 +106,7 @@
         <strong>🔴 Hard</strong><span>Algebra plus basic geometry &amp; trig</span>
       </button>
     </div>
-    <p class="hint">Tip: press 1, 2 or 3 to choose. In battle, press 1–4 to answer.</p>
+    <p class="hint">Tip: press 1, 2 or 3 to choose. Walk with the arrow keys / WASD, answer with 1–4. Answer right in a row for combo damage!</p>
   </div>
 </div>
 
